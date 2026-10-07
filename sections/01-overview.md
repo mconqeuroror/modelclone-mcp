@@ -7,7 +7,7 @@ ModelClone exposes a **[Model Context Protocol (MCP)](https://modelcontextprotoc
 | **Remote (production)** | `https://mcp.modelclone.app/mcp` | Claude.ai, Claude Code, Cursor (HTTP) |
 | **Local stdio** | `integrations/mcp-modelclone/` | Offline dev, clients without HTTP MCP |
 
-**Server version:** `2.0.0` (see `GET …/mcp/health`).
+**Server version:** `2.1.0` (see `GET …/mcp/health`).
 
 ## Architecture
 

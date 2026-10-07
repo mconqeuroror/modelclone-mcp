@@ -1,13 +1,13 @@
 # Typed tools (full product surface)
 
-As of MCP v2.0.0 the server exposes **110 tools** (108 REST proxies + `wait_for_generation` + `api_v1_request`) covering every integrator-product workflow. Integrator overview: **`docs/public-api/30-mcp.md`**. Setup entry point: **`docs/MCP.md`**.
+As of MCP v2.1.0 the server exposes **226 tools**, including `get_creative_skill`, `wait_for_generation`, and `api_v1_request`, covering every integrator-product workflow. Integrator overview: **`docs/public-api/30-mcp.md`**. Setup entry point: **`docs/MCP.md`**.
 
 | Group | Tools |
 |-------|-------|
 | Meta & account | `get_me`, `get_pricing_generation`, `confirm_adult`, `get_notifications`, `notifications_mark_read`, `notifications_mark_all_read`, `get_notification_preferences`, `set_notification_preferences`, `get_my_flags`, `get_plans`, `api_v1_request` |
 | Generations | `list_generations`, `get_generation`, **`wait_for_generation`**, `generations_batch_delete`, `generations_monthly_stats` |
 | Models & wizard | `list_models`, `get_model`, `create_model`, `delete_model`, `models_generate_reference`, `models_generate_poses`, `models_status`, `wizard_*` (5) |
-| SFW generate | `generate_image_identity`, `generate_recreate`, `generate_free`, `generate_preset_recreate`, `enhance_prompt`, `generate_motion_video`, `generate_video_motion`, `generate_video_directly`, `generate_face_swap_video`, `generate_image_faceswap`, `generate_complete_recreation`, `describe_target`, `extract_frames`, `generate_advanced`, `creator_studio_*` (5) |
+| SFW generate | `generate_image_identity`, `generate_recreate`, `generate_free`, `generate_model_caps`, `list_styles`, `generate_preset_recreate`, `enhance_prompt`, `generate_motion_video`, `generate_video_motion`, `generate_video_directly`, `generate_face_swap_video`, `generate_image_faceswap`, `generate_complete_recreation`, `describe_target`, `extract_frames`, `generate_advanced`, `creator_studio_*` (8) |
 | NSFW | `nsfw_*` (18) + `sexting_*` (6) + `nsfw_video_*` (4) |
 | ModelClone-X | `mcx_config`, `mcx_generate`, `mcx_status` |
 | img2img | `img2img_describe`, `img2img_describe_status`, `img2img_generate`, `img2img_status` |
@@ -16,6 +16,7 @@ As of MCP v2.0.0 the server exposes **110 tools** (108 REST proxies + `wait_for_
 | Flow Studio | `flows_*` (10) |
 | Gallery & profile | `gallery_*` (7), `set_username` |
 | Avatars | `avatars_*` (5) |
+| Marketing Studio | `marketing_studio_*`, `marketing_products_*`, `marketing_avatars_*`, `marketing_hooks_list`, `marketing_settings_list`, `marketing_ad_*`, `marketing_static_ad_*`, `marketing_speech_*`, `marketing_production_*`, **`marketing_agent_*` (20 session tools)**, **`get_creative_skill`** |
 
 All tool results are JSON in a single `text` content block.
 
@@ -335,7 +336,7 @@ Status polls are rate-limited (120/min per account).
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `generationId` | string | **Yes** | — | Generation id from any submit tool |
-| `timeoutSec` | integer | No | `120` | Max wait time in seconds, min 5, max 570 |
+| `timeoutSec` | integer | No | `300` | Max wait time in seconds, min 5, max 570 |
 | `intervalSec` | integer | No | `5` | Seconds between polls, min 2, max 30 |
 
 #### Example MCP tool call
@@ -972,9 +973,14 @@ Cross-references: [`11-image-generation.md`](../../public-api/11-image-generatio
 | `generate_image_identity` | `POST /generate/image-identity` | Yes | `wait_for_generation` |
 | `generate_recreate` | `POST /generate/recreate` | Yes | `wait_for_generation` |
 | `generate_free` | `POST /generate/free` | Yes | `wait_for_generation` |
+| `generate_model_caps` | `GET /generate/model-caps` | **Sync** | — |
+| `list_styles` | `GET /styles` | **Sync** | — |
 | `enhance_prompt` | `POST /generate/enhance-prompt` | **Sync** | — |
 | `generate_motion_video` | `POST /generate/motion-video` | Yes | `wait_for_generation` |
+| `creator_studio_config` | `GET /generate/creator-studio/config` | **Sync** | — |
 | `creator_studio_image` | `POST /generate/creator-studio` | Yes | `wait_for_generation` |
+| `creator_studio_enhance` | `POST /generate/creator-studio/enhance` | **Sync** | — |
+| `creator_studio_marketplace` | `POST /generate/creator-studio/marketplace` | Yes (1–13 ids) | `wait_for_generation` per id |
 | `creator_studio_video` | `POST /generate/creator-studio/video` | Yes | `wait_for_generation` |
 
 **Webhooks:** `integrationCallbackUrl` + optional `integratorWebhookSecret` in `options` (recreate/free/enhance/image-identity) or `body` (motion/creator studio). **Credits:** `get_pricing_generation`.
@@ -1027,13 +1033,25 @@ Credits: `recreateImage` (**10**/image) or `recreateImageNanoBanana` (**16**/ima
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `modelId` | string | yes | Saved model UUID |
-| `prompt` | string | yes | Scene/idea description |
+| `prompt` | string | yes | Scene/idea description. Oversize → **400** `PROMPT_TOO_LONG` `{ promptChars, maxPromptChars }` before charge |
 | `genModel` | string | no | `nano-banana-pro` (default), `wan-2.7-image`, `seedream-4.5-edit` |
-| `refImageUrls` | string[] | no | Extra reference images |
-| `aspectRatio` / `resolution` | string | no | Engine-dependent — see [`11-image-generation.md`](../../public-api/11-image-generation.md) |
+| `refImageUrls` | string[] | no | When provided (non-empty), **replaces** the model's 3 identity photos. MCP sets `replaceIdentityRefs: true` on the REST body. Dashboard / HTTP default remains append |
+| `aspectRatio` / `resolution` | string | no | Engine-dependent — see [`11-image-generation.md`](../../public-api/11-image-generation.md). WAN 2.7 image honors `aspectRatio` (pads refs + forwards `aspect_ratio`) |
 | `enhance` | boolean | no | Default `true` (+`enhancePromptDefault` **1** credit once per request) |
+| `styleId` | string | no | Style preset id from `list_styles` — prepended before the enhancer when `enhance` is on, appended to the final prompt when off. Unknown id → **400** `STYLE_NOT_FOUND` |
+| `styleStrength` | number | no | 0–1, default **0.7**; below **0.4** the style is a subtle hint |
 | `count` | number | no | 1–8 (default 1) |
 | `options` | object | no | Webhook fields and additional REST keys |
+
+Prompt ceilings for this tool: `nano-banana-pro` **10000**, `wan-2.7-image` **5000**, `seedream-4.5-edit` **1800**. Call `generate_model_caps` for live `promptMaxChars` / ratios / ref limits. Do not send more than 3 custom refs if you meant to replace identity — they replace, they are not appended.
+
+### `generate_model_caps`
+
+`GET /generate/model-caps` — free, synchronous. Returns the `/generate/free` capability map: `maxRefs`, `ratios`, `resolutions`, `supportsRatio`, `supportsResolution`, and `promptMaxChars` per engine. WAN 2.7 image reports `supportsRatio: true`. Call this before submitting `generate_free`. No parameters.
+
+### `list_styles`
+
+`GET /styles` — free, synchronous. Returns the curated style preset catalog (`id`, `name`, `description`, `category` — smartphone / editorial / cinematic / street / documentary / analog / studio). Pass an id as `styleId` on `generate_free`, `creator_studio_image`, or `enhance_prompt` with optional `styleStrength` 0–1 (default **0.7**; below **0.4** the style is applied as a subtle hint). Unknown id → **400** `STYLE_NOT_FOUND` with `validStyleIds`. No parameters.
 
 ### `enhance_prompt`
 
@@ -1055,9 +1073,267 @@ Sync — returns `body.enhancedPrompt`. `options`: `mode`, `genModel`, `modelLoo
 
 Credits: `motionXPerSec` (**9.5**/s) × duration. Poll `wait_for_generation` on `body.generationId`.
 
-### `creator_studio_image` / `creator_studio_video`
+### `creator_studio_config`
 
-Full REST body — model/resolution matrix in [`13-creator-studio.md`](../../public-api/13-creator-studio.md). Video: `cinematic` bucket. Extend/4K via `api_v1_request`.
+No parameters. Returns the live image engine ids, aspect/resolution controls, reference limits, input requirements, current credit tiers, creative modes, marketplace scope counts, and a `video` family catalog (durations, modes, prompt ceilings). Veo 3.1 durations are **4 / 6 / 8** only (`5` is invalid). Call this before choosing or claiming support for an engine. Free and synchronous.
+
+### `creator_studio_image`
+
+Typed parameters cover the common image path and model-aware enhancer:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | yes* | Raw user intent; required unless supplied in legacy `body` |
+| `generationModel` | enum | no | One of the ten Creator Studio image models |
+| `aspectRatio`, `resolution` | string | no | Model-specific output settings |
+| `referencePhotos` | string[] | no | Up to 8 hosted reference images |
+| `inputImageUrl`, `maskUrl` | string | no | Edit/remix inputs |
+| `numImages` | integer | no | 1–4 |
+| `enhancePrompt` | boolean | no | Run the selected model's server-side enhancer |
+| `styleId` | string | no | Style preset id from `list_styles` — feeds the enhancer when `enhancePrompt` is on; appended to the final prompt otherwise |
+| `styleStrength` | number | no | 0–1, default **0.7**; below **0.4** the style is a subtle hint |
+| `mode` | enum | no | Creative mode such as `product_shot`, `moodboard_pin`, or `hero_banner` |
+| `scope` | enum | no | `main`, `product-images`, `aplus`, or `full-set` |
+| `asset`, `productContext`, `brandContext` | string | no | Structured creative context for enhancement |
+| `body` | object | no | Legacy/additional model-specific fields; named parameters override matching keys |
+
+Full model/resolution matrix: [`13-creator-studio.md`](../../public-api/13-creator-studio.md).
+
+### `creator_studio_enhance`
+
+Synchronous, enhancer-only preview. Required `prompt`; optional typed `generationModel`, `mode`, `scope`, `asset`, `productContext`, `brandContext`, references, and `batchIndex` / `batchTotal`. Returns `enhancedPrompt` and charges only `enhancePromptDefault`; an unavailable enhancer returns the original prompt with `fallback: true` and a refund.
+
+### `creator_studio_marketplace`
+
+Submits a coordinated marketplace set from one shared brief:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | yes | Short product/campaign intent |
+| `scope` | enum | no | `main` (1), `product-images` (6), `aplus` (8), `full-set` (13; default) |
+| `referencePhotos` | string[] | no | Up to 8 hosted product images |
+| `inputImageUrl` | string | no | Primary hosted product image |
+| `productContext`, `brandContext` | string | no | Shared product and brand locks |
+| webhook fields | string | no | Applied to every generated asset |
+
+The result includes labeled `generations[]`; call `wait_for_generation` for each id. Cost is `creatorStudioGptImage2 × count + enhancePromptDefault` (one enhancement per set).
+
+### `creator_studio_video`
+
+Video continues to accept the full REST `body`; its rate bucket is `cinematic`. Use `creator_studio_extend`, `creator_studio_4k`, and `creator_studio_1080p` for post-processing. Read `creator_studio_config` → `video` for the live family catalog.
+
+- **Veo 3.1** (`family: "veo31"`): `durationSeconds` **4, 6, or 8** only (default 8). **`5` is rejected** before charge (`Veo 3.1 duration must be 4, 6, or 8 seconds.`). `ref2v` and `extend` stay 8s. Do not send 5.
+- **Video-X** (`family: "videox"`): allowed here and on Reel Recreate (`generate_video_recreate`) and Marketing Studio (`engine: "videox"`). Modes `t2v` \| `i2v` \| `fl2v` \| `r2v` \| `reel-recreate`, duration **5 / 10 / 15**. Video-X is not available on NSFW tools.
+- **Prompt ceilings** (400 `PROMPT_TOO_LONG` `{ promptChars, maxPromptChars }` before charge): Kling 3.0 **2500**, Veo 3.1 **10000**, Seedance 2.5 **30000**. Do not silently trim the user prompt below these values.
+
+### `generate_video_recreate`
+
+`POST /generate/video-recreate` — looks photo + Gemini Analyze JSON prompt. Default family Seedance 2.5; `family: "videox"` snaps duration to 5/10/15. Inspiration reel is not sent to the engine.
+
+---
+
+## Agent ergonomics (submit hints, cost preflight, recovery)
+
+Three conventions apply across the toolset:
+
+1. **Self-describing submits.** Every generation-submit tool response includes `agent: { pollWith, generationIds, note? }` — call the named poll tool with each id (batch submits return one pollable child id per output; the parent set id is not pollable). No need to search for the right poller.
+2. **Cost preflight.** `estimate_cost` (free) quotes the exact credits a submit would charge before you spend: `{ kind: "creator-studio-image" | "creator-studio-video" | "creator-studio-marketplace" | "marketing-video" | "marketing-image", params: { …same fields as the generate tool } }` → `{ credits, approximate, breakdown, note }`. Quote batch jobs to the user before submitting.
+3. **Structured recovery.** Failed responses include a `recovery` field with the concrete next action (e.g. insufficient credits → check `get_me`, invalid enum → fetch `creator_studio_config` / `marketing_studio_config`, NSFW age gate → `confirm_adult`, 429 → wait and retry once). Follow it instead of blind retries.
+
+REST: `POST /pricing/estimate` (free). CLI: `modelclone estimate --kind … --params '{…}'`.
+
+---
+
+## Uploads — typed tools
+
+REST reference: [Uploads](../../public-api/06-uploads.md). These are the bridge between files that exist only in the agent/chat context (or on remote hosts) and the hosted URLs every generation tool expects.
+
+### `upload_media`
+
+`POST /upload/base64` — upload from raw base64 (`base64Data` + optional `fileName`/`contentType`) or a full `dataUrl`. Returns `{ url }` usable in any `imageUrl` / `referencePhotos` / product-image field. **This is the tool to use when the user attached an image to the conversation** — read/encode it and upload; never tell the user ModelClone "cannot use attached files". Default cap ~3.5 MB binary (JSON body limit).
+
+### `upload_from_url`
+
+`POST /upload/from-url` — the server fetches a public https file URL and mirrors it into ModelClone storage. Use for website/CDN assets the user links to, or when a source host is not reachable by generation providers. Private hosts and non-https URLs are rejected.
+
+Decision guide: chat attachment → `upload_media` · remote link → `upload_from_url` · local file with CLI access → `modelclone upload <file>`.
+
+---
+
+## Marketing Studio — typed tools
+
+REST reference: [Marketing Studio](../../public-api/26-marketing-studio.md). Branded ad video/image with reusable products, presenter avatars, and curated hook/setting setup items (Higgsfield Marketing Studio parity).
+
+### Typical sequence
+
+1. `marketing_products_fetch` (URL import; poll `marketing_products_get` until `status: "ready"`) or `marketing_products_create`.
+2. Optionally `marketing_avatars_list` (pick a preset) or `marketing_avatars_create` (custom presenter from portraits).
+3. Optionally `marketing_hooks_list` / `marketing_settings_list` — valid only for `ugc`, `ugc_how_to`, `ugc_unboxing`, `product_review`, `ugc_virtual_try_on`.
+4. `marketing_studio_video` (or `marketing_studio_image`) → poll with `wait_for_generation`.
+
+### `marketing_studio_config`
+
+Free discovery: mode list (with per-mode `allowsSetupItems`), duration/aspect/resolution limits, and live credit rates.
+
+### `marketing_products_list` / `marketing_products_get` / `marketing_products_create` / `marketing_products_fetch`
+
+`marketing_products_fetch` takes a public https `url`, extracts title/description/images (OG + JSON-LD, Grok fallback), mirrors images to ModelClone storage, and dedupes by URL — repeat fetches return the existing product. Import runs in the background: the returned product starts as `pending`; poll `marketing_products_get` until `ready` (or `failed` with `errorMessage`).
+
+### `marketing_avatars_list` / `marketing_avatars_create`
+
+Presets are global (`type: "preset"`); customs belong to the caller. `marketing_avatars_create` takes `name` + up to 4 hosted portrait `imageUrls` (first = primary).
+
+### `marketing_hooks_list` / `marketing_settings_list`
+
+Read-only curated catalogs; optional `search` filter. Hook text is prepended to the prompt at generation time — it never replaces the prompt.
+
+### `marketing_studio_video`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | no* | Creative brief; optional when `productIds` provide context |
+| `mode` | enum | no | 9 slugs, default `ugc` |
+| `engine` | enum | no | `seedance` (default), `geminiOmni`, or `videox` (Video-X) — limits/credits from `marketing_studio_config` → `video.engines` |
+| `productIds` | string[] | no | Up to 3 ready products |
+| `avatars` | array | no | Max 1: `{ id, type: "preset" \| "custom" }` |
+| `hookId`, `settingId` | string | no | UGC-family modes only; `400` otherwise |
+| `durationSeconds` | integer | no | Seedance 4–30 (default 8); Gemini Omni `4\|6\|8\|10`; Video-X `5\|10\|15` |
+| `aspectRatio` | string | no | Seedance: `auto`, `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`. Omni: `16:9`\|`9:16`. Video-X: `16:9`\|`9:16`\|`1:1`\|`4:3`\|`3:4`\|`21:9`. Default `9:16` |
+| `resolution` | string | no | Seedance: `480p`\|`720p`. Omni: `720p`\|`1080p`\|`4k`. Ignored for Video-X. Default `720p` |
+| `generateAudio` | boolean | no | Seedance only (default `true`). Ignored for `geminiOmni` and `videox` (always native audio) |
+| `videoxQuality` | enum | no | Video-X only: `turbo` (default) or `quality` |
+| `enhancePrompt` | boolean | no | Default `true` — Grok marketing-video enhancer |
+
+For other languages after a finished clip, use `marketing_studio_video_translate`. The former `voiceover` param was removed and now returns `400`.
+
+Cost: Seedance `marketingStudioVideo{480p\|720p}PerSec × duration`; Omni uses `geminiOmni{720p\|1080p\|4k}PerSec`. Returns `generation.id`; poll `wait_for_generation`.
+
+### `marketing_studio_video_translate`
+
+`POST /generate/marketing-studio/video/translate` — HeyGen lipsync dubbing of a completed Marketing video. **Pass-through cost only** (no margin).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `generationId` | string | yes | Completed `marketing-studio-video` (or prior translate) id |
+| `language` | string | yes | Target language display name from config `translation.languages` (e.g. `"Spanish"`) |
+| `mode` | enum | no | `speed` (~5 cr/s) or `precision` (default, ~10 cr/s) |
+
+Returns `generation.id` (`type: marketing-studio-video-translate`); poll `wait_for_generation`. Quote cost first with `estimate_cost` kind `marketing-video-translate`.
+
+### `marketing_studio_image`
+
+GPT Image 2 ad image with product references. `hookId`/`settingId` are rejected (video-only). Flat `marketingStudioImage` credits.
+
+---
+
+## Creative skills (`get_creative_skill`)
+
+Read-only. No REST call and no credit spend. Call it before the matching agent step.
+
+| `skill` | When | Topics |
+|---|---|---|
+| `copy` | Before `marketing_agent_copy` | none |
+| `direction` | Before `marketing_agent_plan` | none |
+| `studio` | Before `marketing_agent_create` | `entities`, `interview-flow`, `ugc-realism`, `unsupported` |
+| `brand`, `logo`, `social` | Brand, logo, or social deliverables | the catalog topic only |
+
+The server still applies the copy and direction skills when it drafts or plans. This tool lets the MCP client read the same text.
+
+---
+
+## Marketing Studio — conversational agent (`marketing_agent_*`)
+
+REST reference: [Marketing Studio — conversational production sessions](../../public-api/26-marketing-studio.md#conversational-production-sessions). These tools proxy authenticated `/api/v1/marketing-studio/agent*` routes 1:1 (same gates, credits, and revision rules as the Marketing Studio app).
+
+**Reasoning model:** agent copy/plan/quality/repair/finish reasoning uses OpenRouter `anthropic/claude-opus-5.5` (`MARKETING_AGENT_MODEL`). Each reasoning call reserves **120 credits** up front and settles to actual helper pricing from provider usage.
+
+### Review modes
+
+| Mode | Behavior |
+|------|----------|
+| **`manual`** | Stops at an **approval** gate before motion. The user must call `marketing_agent_review` with `decision: "approve"` and the exact current `assetIds` (audio + frame IDs). A `continue` / `next` message **never** records approval. |
+| **`autonomous`** | The server runs multimodal **quality** inspection on actual media. Passed/failed checks are appended to `session.reviews` with `reviewer: "ai"` and `model: "anthropic/claude-opus-5.5"`. Before motion, `approveAgent` records production approval with `reviewer: "ai"` — **not** a user approval. Bounded by `budgetCredits` and per-step `maxAttempts` (1–10). |
+
+Create requires `reviewMode`, positive `budgetCredits`, and `maxAttempts`. Optional locked `script`, `voice` (`voiceId`, optional `modelId`, optional `ttsModel: "eleven_v4"`), `endCardGenerationId`, `productionId`, and `sourceRequest` (products, avatars, brand, speech language, aspect ratio, etc.). A presenter voice is `voiceId` `mkt_<avatarId>`; `modelId` may be omitted until speech is recorded.
+
+### Messaging vs advancing
+
+- **`marketing_agent_message`** — Creative feedback, session limit changes (`settings.maxAttempts`, `settings.budgetCredits`), and owned settings (`settings.voice`, `settings.brandId`, `settings.endCard`, including `settings.endCard.productId` for the ending photograph, …). If the entire message matches `continue`, `next`, `proceed`, `go ahead`, `start`, or `run the next step` (case-insensitive), the server runs the **next executable** step with `execute: true`. Any other text is stored as feedback and handled as a **feedback** step (conversational reply; may revise a saved plan when explicitly requested), except while a spoken line is missing, a manual model choice is pending, the ending is waiting, a charge is unresolved, or the higher-tier step is waiting, or a blocked step is still closed, or a step is still running, including a clip, reference, frame, join, card, lip-sync, or cut still with the provider, or a prompt repair is waiting, or an inspection is the next step, or the final cut is the next step. A note during that repair is kept for the rewrite. A note before an inspection is kept for that check. A note before the final cut is kept for the edit ranges. That note drops a saved cut and does not start one. A note while a lip-sync quote is next, or while that quote is waiting for approval, stays in the transcript. It does not approve the quote, call the model, or start the sync. A reply before a production exists ignores an invented plan and does not block the session. A reply that includes a plan this ad cannot use leaves the saved plan and does not block the session. A reply that changes a locked spoken line leaves that line and does not apply the plan. A chat reply that changes the scene after product photos or starting frames exist leaves those images in place. A chat reply after the video has been rendered leaves that video in place and does not block the session. Those notes stay in the transcript and do not start feedback or a generation. Before a production exists, `settings.budgetCredits` follows the spend rule: autonomous mode switches the engine, and manual mode keeps it until the message is `use Seedance 2.5` or `use Video X`. After a production exists, the engine stays. Before a production exists, `settings.durationSeconds` sets the shot length. Video X accepts 5, 10 or 15. Seedance accepts a whole number from 4 to 30. That length stays locked once a production exists. A chat reply that changes that length leaves it and does not apply the plan. Before a production exists, `settings.aspectRatio` sets the frame shape to 9:16, 16:9, or 1:1. The final cut uses that shape. It stays locked once a production exists. A shape the join cannot deliver is stored as 9:16. The ending card and the join use that same shape. A chat note before that manual model choice, while the ending is waiting for a product and brand, or while a charge is still unresolved, stays in the transcript and does not start a feedback generation. An unresolved charge stays closed. When `nextAction.step` is `audio` and the shot has no spoken line, `settings.speechLine` (1–2000 characters) stores that line. It does not start synthesis or replace a locked line.
+- **`marketing_agent_advance`** / stage tools — Pass `revision` (optimistic concurrency). **`execute: true`** is required to spend credits or call providers; omitting it or `execute: false` returns current state only. Stage tools are thin wrappers around the same advance orchestrator with a fixed step path. That step runs only when it is the current next action. `brief` runs only for copy. `captions` and `export` run only for finish. Finish and sync cannot run early.
+- **`marketing_agent_advance`** with **`run: true` / `run: false`** (no `step`) — toggles autonomous background runner (`202`); only valid in **`autonomous`** mode. Stops after the in-flight accepted step.
+
+Manual sync spend requires `marketing_agent_review` when `nextAction.scope === "sync"` (quote hash in `assetIds`). Rejecting the current inputs or that quote leaves the approval open. It does not block the session or start motion or sync.
+
+### Typical `nextAction.step` order
+
+The server computes the next safe step from session state and linked production (`session.nextAction`). Do not skip ahead — out-of-order execution returns `MARKETING_AGENT_ORDER`.
+
+**Pre-production (no `productionId` yet):**
+
+1. **`copy`** — draft or lock spoken script (`marketing_agent_copy`; `marketing_agent_brief` hits the same handler via step alias).
+2. **`plan`** — shared scene + per-segment action outlines; creates the production record.
+
+**Production (after plan is saved):**
+
+3. **`audio`** — Eleven v4 speech per segment; inspect audible words and duration before motion dependencies. If the shot has no spoken line, `canExecute` is false until `settings.speechLine` stores one. That save does not record speech. A normal chat message is not stored as that line and does not start a feedback generation. A missing line does not use an attempt.
+4. **`components`** → **`quality`** — for each handled prop: generate reference, then inspect actual image evidence. A reference generation that failed is prepared again. One that is still running waits.
+5. **`frames`** (or **`continuation`** then **`frames`** for later segments) → **`quality`** — starting frames from approved components or the real prior ending frame. A failed first frame is prepared again. A failed later frame extracts the previous ending frame again. A failed extraction can be tried again. An extraction that is still running waits. A frame that is still running waits.
+6. **`approval`** (manual only) or autonomous **`quality`** + internal `approveAgent` — exact audio + references before motion.
+7. **`render`** — submit motion for the current approved segment (recover pending jobs instead of duplicating). A generation that failed is rendered again from those inputs. A generation that is still running stays waiting.
+8. **`upgrade`** — only after a passed Seedance 720p draft whose delivery tier is 1080p. A one-video render uses that finished video. Separate clips offer the shot that just passed, before the next shot starts. The next shot waits until that 1080p clip finishes and passes review. A repair of a shot that already moved to 1080p renders again at 1080p. Manual mode must pass `upgrade` `accept` or `decline` on `marketing_agent_advance` (or the chat phrases `regenerate` / `keep the draft`). Continue does not spend in manual mode. In autonomous mode, continue runs that higher tier. Video X does not enter this step.
+9. Repeat **continuation → frames → quality → render** for multi-segment `separate_clips` plans.
+10. **`assembly`** — stitch accepted segments in order. A failed join can start again. A join that fails before a file exists is saved as failed and can start again. A join that is still running stays closed. A 720p draft stays 720p. A shot rendered at 1080p makes the join 1080p. Final editing uses that same canvas, including after lip-sync. The lip-sync record keeps that canvas.
+11. **`sync`** — when speech language is not English (or lip-sync is otherwise required); manual mode may require quote approval via **`review`**. A failed lip-sync prepares a new quote. One that is still running waits.
+12. **`endcard`** — branded ending from one owned product and brand logo. A failed card is drawn again. A card that is still drawing waits. If either is missing, the step asks and does not draw a card or use an attempt. A locked spoken line longer than 80 characters asks for a 1–80 character headline and is not shortened. The shot line counts when the session has no script. A line that already fits is the headline. A slogan, call to action, or product line is drawn only when the user saved it. The model is not called to write the card. An omitted call to action stays empty. `settings.endCard.productId` can name the product after the video exists.
+13. **`finish`** — final edit ranges, captions, and export (`marketing_agent_finish`, `marketing_agent_captions`, and `marketing_agent_export` route to this step; `captions` / `export` are step aliases). A cut the worker marked failed starts again from the saved ranges. A cut that is still running waits.
+
+**`quality`** can also run whenever completed media exists that lacks a passing review for its current URL (interleaved after generation). A voice take that is silent or does not match the locked line is detached before motion, and the next continue records that same line again. A take already used in a clip stays attached. Saving the spoken line, detaching a missed take, or attaching the new recording changes only that audio. Approved product photos and starting frames stay. A failed product or starting-frame reference, before motion, schedules a prompt repair in both review modes. The next continue rewrites that prompt and does not inspect the same image again. A failed clip does the same for its motion prompt in both review modes. Manual review does not render on that continue. A failed ending card stays in place until the user saves a different headline or card text. That save removes only the failed card. A passed card, and a card already used in final editing, stay locked. A failed final cut is removed when the ad is ready to be cut again. The next continue measures the source again and does not reuse that file. A failed lip-sync is removed the same way. The next continue prepares a new quote and does not reuse that file. **`repair`** runs after a recorded failed review of that exact asset and does not waive the check.
+
+### Session control tools
+
+| Tool | REST | Purpose |
+|------|------|---------|
+| `marketing_agent_create` | `POST /marketing-studio/agent` | Start session (`brief`, `reviewMode`, `budgetCredits`, `maxAttempts`, …) |
+| `marketing_agent_get` | `GET /marketing-studio/agent/:sessionId` | Resume; read `nextAction`, `reviews`, `receipts`, `blocker`, `production` |
+| `marketing_agent_message` | `POST …/:sessionId/message` | Feedback, settings, or whole-message **continue** |
+| `marketing_agent_advance` | `POST …/:sessionId/advance` | Generic advance; optional `run`, `retry`, `recover`, `step`, `upgrade` `accept` or `decline` |
+| `marketing_agent_review` | `POST …/:sessionId/review` | Manual **`approve`** / **`reject`** with exact `assetIds` |
+| `marketing_agent_finish` | `POST …/:sessionId/finish` | Advance **`finish`** when `nextAction` allows |
+
+Shared body fields on stage tools: `{ sessionId, revision?, execute? }` (plus advance-only flags on `marketing_agent_advance`).
+
+### Stage tools (fixed REST step paths)
+
+Each row is `POST /marketing-studio/agent/:sessionId/steps/<step>` with the same advance body.
+
+| Tool | Step path | Executes when `nextAction.step` is |
+|------|-----------|-------------------------------------|
+| `marketing_agent_brief` | `steps/brief` | aliases → **`copy`** |
+| `marketing_agent_copy` | `steps/copy` | **`copy`** |
+| `marketing_agent_plan` | `steps/plan` | **`plan`** |
+| `marketing_agent_audio` | `steps/audio` | **`audio`** |
+| `marketing_agent_components` | `steps/components` | **`components`** |
+| `marketing_agent_frames` | `steps/frames` | **`frames`** |
+| `marketing_agent_quality` | `steps/quality` | **`quality`** |
+| `marketing_agent_render` | `steps/render` | **`render`** |
+| `marketing_agent_continuation` | `steps/continuation` | **`continuation`** |
+| `marketing_agent_assembly` | `steps/assembly` | **`assembly`** |
+| `marketing_agent_sync` | `steps/sync` | **`sync`** |
+| `marketing_agent_captions` | `steps/captions` | aliases → **`finish`** |
+| `marketing_agent_endcard` | `steps/endcard` | **`endcard`** |
+| `marketing_agent_export` | `steps/export` | aliases → **`finish`** |
+
+CLI parity: `modelclone marketing agent <operation> [sessionId] --file body.json` (see `cli/src/commands/marketing.js`).
+
+### Operator checklist
+
+1. `marketing_studio_config` + product/avatar/hook lists — build `sourceRequest`.
+2. `marketing_agent_create` → save `session.id` and `revision`.
+3. Loop: `marketing_agent_get` → read `nextAction` → call the matching stage tool or `advance` with `{ revision, execute: true }` **only** when `canExecute` is true.
+4. Manual mode: on `requiresReview`, call `marketing_agent_review` (never infer approval from chat text).
+5. On `blocker` or `MARKETING_AGENT_RETRY_LIMIT`, inspect evidence; adjust inputs or authorized `settings.maxAttempts` / `settings.budgetCredits` via `message` before retrying.
+
+Related lower-level workflow (no conversational session): **`marketing_production_*`** tools and resource `modelclone://v1/marketing-preproduction`.
 
 ---
 
@@ -1147,7 +1423,7 @@ REST reference: [NSFW Studio](../../public-api/14-nsfw.md). Costs: `get_pricing_
 | Body field | Type | Required | Description |
 |------------|------|----------|-------------|
 | `modelId` | string | yes | NSFW-verified model with complete refs |
-| `presetId` | string | yes | Preset from v2 catalog (210 presets — category prefixes in REST doc) |
+| `presetId` | string | yes | Preset from v2 catalog (222 presets — category prefixes in REST doc) |
 | `aspectRatio` | string | no | `1:1`, `4:5`, `9:16` (default), `16:9`, `3:4`, `2:3` |
 | `count` | number | no | 1–8 images (default 1); 6 credits each |
 | `integrationCallbackUrl` / `integratorWebhookSecret` | string | no | Webhook fields |
@@ -1261,7 +1537,7 @@ When `status === "completed"`, fetch video URL via `get_generation` / `wait_for_
 | `regenerate-previews` | `{}` | 20 | Fresh batch of 3; → `previewing` |
 | `edit-frame` | `{ prompt, refImageUrl? }` | 10 | Async edit; poll session until `currentFrameUrl` updates |
 | `approve` | `{}` | free | → `approved` (requires working frame, no pending edit) |
-| `submit` | `{}` | `ceil(duration × 31.25)` | Final 720p video; → `submitted`; sets `finalGenerationId` |
+| `submit` | `{}` | `ceil(duration × nsfwVideoPerSec)` (default 78.75) | Final 720p video; → `submitted`; sets `finalGenerationId` |
 
 **Typical MCP sequence:**
 

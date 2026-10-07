@@ -53,7 +53,7 @@ No admin surface — intentional. Admin paths are excluded from the allowlist an
 
 ### Typed tool coverage
 
-**110 typed tools** cover all major integrator-product flows. Remaining routes (JWT auth signup/login, Fanvue OAuth browser start, web push token CRUD, API key self-service, onboarding trial, viral-reels stream tokens) use **`api_v1_request`** with `modelclone://v1/route-catalog` — documented, not a functional gap for API-key backends.
+**226 tools** cover all major integrator-product flows, including live Creator Studio engine discovery, enhancer preview, and marketplace sets. Remaining routes (JWT auth signup/login, Fanvue OAuth browser start, web push token CRUD, API key self-service, onboarding trial, viral-reels stream tokens) use **`api_v1_request`** with `modelclone://v1/route-catalog` — documented, not a functional gap for API-key backends.
 
 ## REST parity statement
 

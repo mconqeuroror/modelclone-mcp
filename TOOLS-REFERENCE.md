@@ -1,11 +1,15 @@
 # ModelClone MCP server
 
+Integration discovery: call `get_api_capabilities` or public `GET /api/v1/capabilities` to read the active tool groups and REST paths. Every tool carries read/write hints; unknown writes remain conservatively destructive and non-idempotent. Responses preserve `content[0].text` and add `structuredContent` plus `isError` for failed operations. A pending upload is not a tool failure.
+
+For source builds with the setup commands: `modelclone mcp install --client claude` creates an OAuth connection; restart the client and sign in. Use `--dry-run` first, `mcp status` to inspect installation, and `mcp uninstall --client claude` to remove it. Other supported clients are `claude-desktop`, `cursor`, `windsurf`, and `vscode`. Installation never embeds CLI API keys. See the CLI reference for scope and backup behavior. npm availability requires a separate CLI release.
+
 The ModelClone MCP server connects your ModelClone account to any MCP-capable AI client — Claude.ai, Claude Code, Claude Desktop, Cursor, or any tool that speaks MCP over Streamable HTTP. Once connected, the assistant can do everything the product does through the API: create AI models, generate SFW and NSFW images and videos, run ModelClone-X and img2img, drive Flow Studio pipelines, browse the community gallery, and poll jobs to completion.
 
 - **Endpoint:** `https://mcp.modelclone.app/mcp`
 - **Transport:** Streamable HTTP (Model Context Protocol)
 - **Auth:** your integrator API key on every request — `X-Api-Key: mcl_…` or `Authorization: Bearer mcl_…`
-- **Server version:** `2.0.0`
+- **Server version:** `2.1.0`
 
 Everything the MCP does maps 1:1 onto the REST API at `https://modelclone.app/api/v1`. One MCP tool call is exactly one REST call — nothing is cached server-side, and the same credit costs and rate limits apply.
 
@@ -74,7 +78,44 @@ curl https://mcp.modelclone.app/mcp/health
 
 ## Tool reference
 
-Every **submit** tool returns a generation ID (or job/session id). To get the final result, poll with `wait_for_generation` (or the relevant status tool). Parameters below are exactly the tool input schemas.
+Every **submit** tool returns a generation ID (or job/session id) plus an `agent: { pollWith, generationIds }` hint naming its own poll tool — call it (usually `wait_for_generation`, one id at a time) to get the final result. Failed responses include a `recovery` field with the concrete next action.
+
+Three cross-cutting conventions:
+
+- **Uploads:** chat-attached files → `upload_media` (base64 → flat top-level `url`); remote / larger files → `upload_from_url`. Practical base64 cap ~2.5 MB binary on serverless. Every generation `imageUrl`/`referencePhotos` field takes the returned URL. See [Uploads](./06-uploads.md).
+- **Cost preflight:** `estimate_cost` (free) quotes the exact credits before a submit — kinds `creator-studio-image`, `creator-studio-video`, `creator-studio-marketplace`, `marketing-video`, `marketing-image`.
+- **Marketing Studio:** `marketing_studio_config`, `marketing_products_*` (incl. `fetch` URL import), `marketing_avatars_*`, `marketing_hooks_list`, `marketing_settings_list`, `marketing_ad_analyze`, `marketing_static_ad_analyze`, `marketing_static_ad_recreate`, `marketing_studio_video` (optional `engine` `seedance`\|`geminiOmni`\|`videox`; `mode: ad_recreate` + `adBlueprint`), `marketing_studio_image`, `marketing_studio_video_translate`, plus the conversational agent tools below. REST contract: [Marketing Studio](./26-marketing-studio.md).
+
+### Marketing Studio agent
+
+`get_creative_skill` reads a bundled skill before the matching agent step. `skill: "copy"` before `marketing_agent_copy`. `skill: "direction"` before `marketing_agent_plan`. `skill: "studio"` before `marketing_agent_create`; studio topics are `entities`, `interview-flow`, `ugc-realism`, and `unsupported`. The call is read-only and does not spend. The server still applies the copy and direction skills when it drafts or plans.
+
+Opus 5.5 (`anthropic/claude-opus-5.5`) guides one ad session. **Manual** mode waits for `marketing_agent_review` of the exact voice and references before motion. **Autonomous** mode inspects the actual assets, stores those checks as AI reviews, and repairs failures inside the session budget and attempt limit. A spend limit with no explicit engine uses Video X. No strict limit uses Seedance 2.5, first at draft 720p; after that draft passes review, manual mode asks before a 1080p render and agent review can run that render itself. Video X stays on one render. `marketing_agent_advance` takes `upgrade` `accept` or `decline` for that choice. A message whose whole text is `continue`, `next`, `proceed`, `go ahead`, `start`, or `run the next step` runs the current step. Any other message is feedback and is not approval. `execute: true` is required before a step spends credits. `brief` aliases `copy`; `captions` and `export` alias `finish`.
+
+| Tool | REST |
+|---|---|
+| `get_creative_skill` | Local read. No REST call. `skill` is `copy`, `direction`, `studio`, `brand`, `logo`, or `social`. |
+| `marketing_agent_list` | `GET /marketing-studio/agent` |
+| `marketing_agent_create` | `POST /marketing-studio/agent` |
+| `marketing_agent_get` | `GET /marketing-studio/agent/:sessionId` |
+| `marketing_agent_message` | `POST /marketing-studio/agent/:sessionId/message` |
+| `marketing_agent_advance` | `POST /marketing-studio/agent/:sessionId/advance` |
+| `marketing_agent_review` | `POST /marketing-studio/agent/:sessionId/review` |
+| `marketing_agent_finish` | `POST /marketing-studio/agent/:sessionId/finish` |
+| `marketing_agent_brief` | `POST …/steps/brief` (alias of copy) |
+| `marketing_agent_copy` | `POST …/steps/copy` |
+| `marketing_agent_plan` | `POST …/steps/plan` |
+| `marketing_agent_audio` | `POST …/steps/audio` |
+| `marketing_agent_components` | `POST …/steps/components` |
+| `marketing_agent_frames` | `POST …/steps/frames` |
+| `marketing_agent_quality` | `POST …/steps/quality` |
+| `marketing_agent_render` | `POST …/steps/render` |
+| `marketing_agent_continuation` | `POST …/steps/continuation` |
+| `marketing_agent_assembly` | `POST …/steps/assembly` |
+| `marketing_agent_sync` | `POST …/steps/sync` |
+| `marketing_agent_captions` | `POST …/steps/captions` (alias of finish) |
+| `marketing_agent_endcard` | `POST …/steps/endcard` |
+| `marketing_agent_export` | `POST …/steps/export` (alias of finish) |
 
 Many tools accept a free-form `body` or `options` object — additional route-specific JSON fields. When unsure of the exact shape, read the `modelclone://v1/openapi` resource.
 
@@ -83,7 +124,10 @@ Many tools accept a free-form `body` or `options` object — additional route-sp
 | Tool | Parameters | Description |
 |---|---|---|
 | `get_me` | — | `GET /me` — profile, credits, subscription tier. Call first in a session. |
-| `get_pricing_generation` | — | `GET /pricing/generation` — authoritative live credit costs per generation type. |
+| `get_pricing_generation` | — | `GET /pricing/generation` — authoritative live credit unit rates per generation type. |
+| `estimate_cost` | `kind` (enum, required), `params` (object, optional — same fields as the matching generate tool) | `POST /pricing/estimate` — **free** pre-submit quote: `{ credits, approximate, breakdown, note }`. |
+| `upload_media` | `base64Data` or `dataUrl` (one required; aliases `data`/`base64`/`content`/`image`), `fileName`, `contentType` (optional) | In-process base64 upload — returns flat `{ ok, url, contentType, bytes }` (not nested under `body`). Cap ~2.5 MB binary; larger → `upload_from_url`. |
+| `upload_from_url` | `url` (required, public https), `fileName` (optional) | In-process mirror of a remote file into ModelClone storage — flat `{ ok, url, …, sourceUrl }`. |
 | `confirm_adult` | — | `POST /auth/confirm-adult` — one-time 18+ confirmation unlocking NSFW features. |
 | `get_notifications` | `page`, `pageSize`, `readState` (optional) | `GET /me/notifications/` — paginated notification history. |
 | `notifications_mark_read` | `ids[]` (required) | `POST /me/notifications/mark-read` |
@@ -102,7 +146,7 @@ Web push token registration (`GET /me/notifications/vapid-public-key`, token CRU
 |---|---|---|
 | `list_generations` | `type` (string), `modelId` (uuid), `status` (string — `processing`/`completed`/`failed` or comma list), `limit` (int 1–200), `offset` (int ≥0), `includeTotal` (boolean) — all optional | `GET /generations` — paginated history across all types. |
 | `get_generation` | `generationId` (string, required) | `GET /generations/:id` — status + `outputUrl`. Canonical poll target. |
-| `wait_for_generation` | `generationId` (string, required), `timeoutSec` (int 5–570, default 120), `intervalSec` (int 2–30, default 5) | Server-side poll until the generation is `completed`/`failed` or the timeout elapses. **Prefer this after any submit.** |
+| `wait_for_generation` | `generationId` (string, required), `timeoutSec` (int 5–570, default 300), `intervalSec` (int 2–30, default 5) | Server-side poll until the generation is `completed`/`failed` or the timeout elapses. **Prefer this after any submit.** |
 | `generations_batch_delete` | `body` with `ids[]` | `POST /generations/batch-delete` — delete multiple generations. |
 | `generations_monthly_stats` | — | `GET /generations/monthly-stats` — monthly counts for the account. |
 
@@ -348,13 +392,17 @@ REST details: [Image generation](./11-image-generation.md) · [Video generation]
 | `generate_motion_video` | `body` (`imageUrl`, `videoUrl`, …) | `POST /generate/motion-video` | Async → `wait_for_generation` |
 | `generate_video_motion` | `body` | `POST /generate/video-motion` | Async → `wait_for_generation` |
 | `generate_video_directly` | `body` | `POST /generate/video-directly` | Async → `wait_for_generation` |
+| `generate_video_recreate` | typed `prompt` + optional `family`/`looksImageUrl`/`modelId` | `POST /generate/video-recreate` | Async → `wait_for_generation` |
 | `generate_face_swap_video` | `body` | `POST /generate/face-swap-video` | Async → `wait_for_generation` |
 | `generate_image_faceswap` | `body` | `POST /generate/image-faceswap` | Async → `wait_for_generation` |
 | `generate_complete_recreation` | `body` | `POST /generate/complete-recreation` | Async — **two** generation ids (image + video) |
 | `describe_target` | `body` | `POST /generate/describe-target` | **Sync** |
 | `extract_frames` | `body` | `POST /generate/extract-frames` | **Sync** (free helper) |
 | `generate_advanced` | `body` | `POST /generate/advanced` | Async → `wait_for_generation` |
-| `creator_studio_image` | `body` | `POST /generate/creator-studio` | Async → `wait_for_generation` |
+| `creator_studio_config` | none | `GET /generate/creator-studio/config` | **Sync**, free |
+| `creator_studio_image` | typed image/enhancer fields + optional legacy `body` | `POST /generate/creator-studio` | Async → `wait_for_generation` |
+| `creator_studio_enhance` | typed prompt/enhancer fields | `POST /generate/creator-studio/enhance` | **Sync** — read `body.enhancedPrompt` |
+| `creator_studio_marketplace` | typed scope/product/brand/reference fields | `POST /generate/creator-studio/marketplace` | Async → poll every labeled id |
 | `creator_studio_video` | `body` | `POST /generate/creator-studio/video` | Async → `wait_for_generation` |
 | `creator_studio_extend` | `body` | `POST /generate/creator-studio/video/extend` | Async → `wait_for_generation` |
 | `creator_studio_4k` | `body` | `POST /generate/creator-studio/video/4k` | Async → `wait_for_generation` |
@@ -445,9 +493,29 @@ Driving clip 3–15 s. Credits: `motionXPerSec` (**9.5**/s default) × duration.
 
 Poll with `wait_for_generation` using `body.generationId`.
 
-#### `creator_studio_image` / `creator_studio_video` / `creator_studio_extend` / `creator_studio_4k`
+#### `creator_studio_config`
 
-Pass full REST body. Image: `prompt`, `generationModel`, `aspectRatio`, `resolution`, `referencePhotos`, `maskUrl`, `numImages`. Video: `family`, `mode`, `prompt`, `durationSeconds`, `imageUrl`, … — see [Creator Studio](./13-creator-studio.md). Video rate bucket: `cinematic` (30/min). For mask-requiring modes, upload via presign/PUT first.
+No parameters. Returns live image engine ids, aspect/resolution capabilities, reference limits, input requirements, current credit tiers, creative modes, and marketplace scope counts. Call it before selecting or claiming support for an engine.
+
+#### `creator_studio_image`
+
+Common image and enhancer fields are typed directly: `prompt`, `generationModel`, `aspectRatio`, `resolution`, `referencePhotos`, `inputImageUrl`, `maskUrl`, `numImages`, `renderingSpeed`, `enhancePrompt`, `mode`, `scope`, `asset`, `productContext`, `brandContext`, and webhook/share fields. A legacy `body` object remains available for additional model-specific fields; named parameters override matching `body` keys.
+
+#### `creator_studio_enhance`
+
+Synchronous preview of Creator Studio's model-aware enhancer. Required `prompt`; optional `generationModel`, creative/marketplace context, references, and batch position. Costs `enhancePromptDefault` only. On enhancer failure, returns the original prompt with `fallback: true` and refunds the charge.
+
+#### `creator_studio_marketplace`
+
+One call submits a coordinated set: `scope` = `main` (1), `product-images` (6), `aplus` (8), or `full-set` (13; default). Pass `prompt`, optional product references, `productContext`, `brandContext`, and webhook fields. Response rows are labeled by `asset`; poll every id. Cost is `creatorStudioGptImage2 × count + enhancePromptDefault`.
+
+#### `generate_video_recreate`
+
+Reel Recreate (`POST /generate/video-recreate`). Looks photo (`looksImageUrl` or `modelId` → half-body setup) + Gemini Analyze JSON in `prompt`. Default `family` is `seedance25`; pass `family: "videox"` for Video-X (duration snaps to 5/10/15, optional `videoxQuality` `turbo`\|`quality`). The inspiration reel is for `describe_video` only — not sent to the engine. Video-X is **not** available on NSFW tools. REST: [Video generation](./12-video-generation.md).
+
+#### `creator_studio_video` / `creator_studio_extend` / `creator_studio_4k`
+
+Pass the full REST body. Video fields include `family`, `mode`, `prompt`, `durationSeconds`, `imageUrl`, … — see [Creator Studio](./13-creator-studio.md). `family: "videox"` (Video-X) supports `t2v` \| `i2v` \| `fl2v` \| `r2v` \| `reel-recreate`, duration 5/10/15, native audio. Video-X is **not** available on NSFW tools. Video rate bucket: `cinematic` (30/min). For mask-requiring modes, upload via presign/PUT first.
 
 ### NSFW studio
 
@@ -509,6 +577,8 @@ Common fields via `options` or top-level: `quantity` (1\|2), `attributes`, `attr
 | `imageUrl` | string | Yes |
 | `prompt` | string | No |
 | `duration` | number | No — `5` (default) or `8` |
+
+Video-X (`family`/`engine` `videox`) is **not** supported on this tool. Use `creator_studio_video`, `generate_video_recreate`, or `marketing_studio_video`.
 
 **Response:** `{ generationId, creditsUsed, duration }` → `wait_for_generation`.
 
@@ -612,7 +682,7 @@ Poll every **3–5 s** until `previewImageUrls.length === 3` or edit completes; 
 | `regenerate-previews` | `{}` | 20 |
 | `edit-frame` | `{ prompt, refImageUrl? }` | 10 |
 | `approve` | `{}` | 0 |
-| `submit` | `{}` | `ceil(sourceVideoDurationSeconds × 31.25)` |
+| `submit` | `{}` | `ceil(sourceVideoDurationSeconds × nsfwVideoPerSec)` (default 78.75). Video-X is not available on NSFW sessions. |
 
 **Sanitization:** generations for this pipeline return `prompt: null` and omit internal `engine` in API-key/MCP JSON. User edit prompts remain on `session.editHistory[].promptUsed`. Global provider fields stripped on all API-key responses.
 
@@ -792,7 +862,10 @@ Full step-by-step recipes with JSON payloads: **`docs/mcp/sections/13-recipes.md
 | `403` — "Session bound to a different API key" | A session id was reused with a different key | Start a fresh session (reconnect) using the correct key. |
 | `410` — `API_V1_SUNSET` (with a `v2BaseUrl`) | The v1 API-key surface has been sunset in favor of v2 | Point your client at the `v2BaseUrl` from the error payload. |
 | Tool returns `{ "ok": false, "error": … }` | The underlying REST call failed (validation, credits, rate limit) | Read the `error` message; check credits with `get_me` and costs with `get_pricing_generation`. |
-| Session silently stops working after inactivity | Idle sessions expire after 30 minutes | Reconnect — state is preserved server-side. |
+| `Server not initialized` / lost `mcp-session-id` | Warm session lived on another serverless instance | Re-`initialize`, or just retry the tool — unknown sessions fall back to a **stateless one-shot** so `upload_media` still works. |
+| Session idle timeout | In-memory sessions expire after 30 minutes on the same instance | Reconnect / re-initialize. |
 | "Route not on integrator product surface" from `api_v1_request` | The path isn't part of the integrator product surface (e.g. billing/admin) | Use only paths listed in `modelclone://v1/route-catalog`. |
 
 > **V1 sunset notice:** when v2 launches, MCP and `/api/v1` API-key traffic may return `410 API_V1_SUNSET` with a `v2BaseUrl` pointer. Watch the API changelog for the cutover date.
+
+Reference templates: `flows_templates` accepts optional `category` and `search`. `flows_template` accepts `templateId`, optional caller-owned `modelId`, and `packIds` (array). Both are read-only. Save its returned `flow` with `flows_create`, then run explicitly. See [Flows](./20-flows.md#reference-templates).

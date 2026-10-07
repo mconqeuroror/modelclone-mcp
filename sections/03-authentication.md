@@ -2,7 +2,7 @@
 
 - Prefix: **`mcl_`**
 - Length: **44 characters** total (`mcl_` + 40 random)
-- Issued in **Settings → API** (Business or partner `apiAccessOverride`) — see integrator auth doc.
+- Issued in **Settings → API** (any account) — see integrator auth doc.
 
 ## Headers (every MCP HTTP request)
 
@@ -52,7 +52,7 @@ Invalid or revoked key:
 
 ## Eligibility (same as REST)
 
-- Mint keys in Settings: **Business** tier, status `active` or `trialing`, or **`apiAccessOverride`**.
+- Mint keys in Settings — available to every account (no tier gate).
 - MCP does **not** bypass plan checks — it proxies your account's real credits and limits.
 
 ## Session binding

@@ -7,7 +7,7 @@ Example response (truncated):
 ```json
 {
   "name": "modelclone-mcp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "transport": "streamable-http",
   "protocol": "https://modelcontextprotocol.io",
   "connectorUrl": "https://mcp.modelclone.app/mcp",
@@ -18,7 +18,7 @@ Example response (truncated):
     "generations": ["list_generations", "get_generation", "wait_for_generation"],
     "models": ["list_models", "get_model", "create_model", "delete_model", "models_generate_reference", "models_generate_poses", "models_status"],
     "wizard": ["wizard_look_variants", "wizard_preview_images", "wizard_custom_reference", "wizard_upload_save", "wizard_finalize_poses"],
-    "generate": ["generate_recreate", "generate_free", "enhance_prompt", "generate_motion_video", "creator_studio_image", "creator_studio_video"],
+    "generate": ["generate_recreate", "generate_free", "enhance_prompt", "generate_motion_video", "creator_studio_config", "creator_studio_image", "creator_studio_enhance", "creator_studio_marketplace", "creator_studio_video"],
     "nsfw": ["nsfw_generate", "nsfw_generate_video", "nsfw_train_lora", "nsfw_training_status", "nsfw_v2_preset", "nsfw_v2_undress", "nsfw_v2_free_prompt"],
     "nsfwVideo": ["nsfw_video_presets", "nsfw_video_create_session", "nsfw_video_get_session", "nsfw_video_session_action"],
     "modelcloneX": ["mcx_config", "mcx_generate", "mcx_status"],
@@ -93,7 +93,7 @@ cd integrations/mcp-modelclone && npm start   # Stdio server
 
 ## Version
 
-MCP server version: **2.0.0** (`createModelcloneMcpServer` / health). Update this appendix when bumping the version in `mcp.routes.js`.
+MCP server version: **2.1.0** (`createModelcloneMcpServer` / health). Update this appendix when bumping the version in `mcp.routes.js`.
 
 ## Quick setup reference
 

@@ -101,7 +101,7 @@ Not an IDE — use the custom connector (§9). Same URL and bearer token as Curs
 curl -sS https://mcp.modelclone.app/mcp/health
 ```
 
-No auth required. Expect `"version": "2.0.0"` and `"toolGroups"`.
+No auth required. Expect `"version": "2.1.0"` and `"toolGroups"`.
 
 Test REST + key separately:
 

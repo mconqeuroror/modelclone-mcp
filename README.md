@@ -7,7 +7,7 @@ Endpoint:  https://mcp.modelclone.app/mcp
 Health:    GET https://mcp.modelclone.app/mcp/health
 Transport: Streamable HTTP (production) · stdio (local dev)
 Auth:      X-Api-Key: mcl_…  or  Authorization: Bearer mcl_…
-Version:   2.0.0
+Version:   2.1.0
 ```
 
 Get an API key: [modelclone.app](https://modelclone.app) → Settings → API (Business plan).
@@ -43,7 +43,7 @@ Use **`https://mcp.modelclone.app/mcp`** — not `modelclone.app/mcp`.
 |-----|----------|----------|
 | **[QUICKSTART.md](./QUICKSTART.md)** | Anyone connecting a client | Claude.ai, Claude Code, Cursor setup, sessions, troubleshooting |
 | **[MODELCLONE_MCP.md](./MODELCLONE_MCP.md)** | Operators & agent authors | **Complete handbook** — architecture, transport, security, recipes |
-| **[TOOLS-REFERENCE.md](./TOOLS-REFERENCE.md)** | Integrators | All **110** tools — parameters, REST mappings, examples |
+| **[TOOLS-REFERENCE.md](./TOOLS-REFERENCE.md)** | Integrators | All **226** tools — parameters, REST mappings, examples |
 | **[sections/](./sections/)** | Maintainers | Editable shards (01–15); merge with `node scripts/merge-mcp-doc.mjs` in monorepo |
 | **[STDIO.md](./STDIO.md)** | Local dev | stdio transport for Cursor / Claude Desktop |
 
@@ -71,7 +71,7 @@ Use **`https://mcp.modelclone.app/mcp`** — not `modelclone.app/mcp`.
 
 ## Tool inventory (summary)
 
-**110 tools** — typed REST proxies + `wait_for_generation` (server poll) + `api_v1_request` (escape hatch).
+**226 tools** — typed REST proxies + `get_creative_skill` (bundled copy, direction, and studio skills) + `wait_for_generation` (server poll) + `api_v1_request` (escape hatch).
 
 | Group | Examples |
 |-------|----------|
@@ -92,6 +92,7 @@ Full per-tool schemas: **[TOOLS-REFERENCE.md](./TOOLS-REFERENCE.md)**
 | `modelclone://v1/route-catalog` | Integrator route inventory |
 | `modelclone://v1/openapi` | OpenAPI contract |
 | `modelclone://v1/getting-started` | Sequencing guide |
+| `modelclone://v1/creative-skills` | Bundled creative skills. Read them with `get_creative_skill`. |
 
 ---
 

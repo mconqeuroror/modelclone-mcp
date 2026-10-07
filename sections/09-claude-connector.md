@@ -16,10 +16,11 @@
 | **Name** | `ModelClone` (any label) |
 | **URL** | `https://mcp.modelclone.app/mcp` |
 | **Transport** | Streamable HTTP (MCP) |
-| **Authentication** | Bearer token **or** API key |
-| **Token / API key** | Your full `mcl_…` string (44 characters) |
+| **Authentication** | OAuth — click **Connect** (browser login on modelclone.app) |
 
 3. Save and enable the connector for your chats.
+
+Fallback: **Request headers** → `x-api-key` = your `mcl_…` if OAuth UI is unavailable.
 
 Do **not** use `https://modelclone.app/mcp` — MCP is only on the **`mcp.`** subdomain.
 
@@ -27,6 +28,7 @@ Do **not** use `https://modelclone.app/mcp` — MCP is only on the **`mcp.`** su
 
 ```bash
 curl -sS https://mcp.modelclone.app/mcp/health | head -c 200
+# Expect JSON with logoUrl + icons (ModelClone mark for connector UI)
 ```
 
 Expect JSON starting with `{"name":"modelclone-mcp"`. HTML = broken Vercel routing (§2).

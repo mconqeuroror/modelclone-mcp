@@ -17,19 +17,43 @@ No credits charged.
 
 ```json
 {
-  "body": {
-    "prompt": "minimal product shot, white background",
-    "generationModel": "nano-banana-pro",
-    "aspectRatio": "1:1",
-    "resolution": "2K",
-    "numImages": 1
-  }
+  "prompt": "minimal product shot, white background",
+  "generationModel": "nano-banana-pro",
+  "aspectRatio": "1:1",
+  "resolution": "2K",
+  "numImages": 1,
+  "enhancePrompt": true,
+  "mode": "product_shot"
 }
 ```
 
 **Poll:** `wait_for_generation` with `body.generation.id` from the tool result (typically 30–90 s).
 
 Credits: `creatorStudio1K2K` default **15**/image at 2K — confirm via `get_pricing_generation`.
+
+---
+
+## Recipe B1 — Marketplace full set
+
+**Tools:** `creator_studio_config` → `creator_studio_marketplace` → `wait_for_generation` for every returned id
+
+1. Quote `creatorStudioGptImage2 × 13 + enhancePromptDefault` and get approval.
+2. Submit:
+
+```json
+{
+  "prompt": "premium skincare serum marketplace listing",
+  "scope": "full-set",
+  "referencePhotos": ["https://cdn.example.com/serum.jpg"],
+  "productContext": "30 ml frosted-glass dropper bottle, gold cap",
+  "brandContext": "clinical white and sage green"
+}
+```
+
+3. Read `generations[]`; each row has `asset`, `id`, and `aspectRatio`.
+4. Call `wait_for_generation` for each id and return URLs labeled by asset.
+
+For a safe live smoke test, use `scope: "main"` (one image). A `207` response is partial success: keep polling successful ids and report `errors[]`.
 
 ---
 
@@ -159,7 +183,7 @@ Poll `generation.id`. Typical time: 1–3 minutes. Default **30** credits ( **50
 }
 ```
 
-Preset catalog: 210 ids — category prefixes in [NSFW Studio](../../public-api/14-nsfw.md#preset-stills). Default **6** credits/image.
+Preset catalog: 222 ids — category prefixes in [NSFW Studio](../../public-api/14-nsfw.md#preset-stills). Default **6** credits/image.
 
 ---
 
@@ -215,7 +239,7 @@ Preset catalog: 210 ids — category prefixes in [NSFW Studio](../../public-api/
 
 **7. Final poll** — `nsfw_video_get_session` every 5–10 s until `status === "completed"` → `wait_for_generation(finalGenerationId)`.
 
-Submit cost: `ceil(sourceVideoDurationSeconds × 31.25)` credits. First preview batch is **free**; regenerate previews **20** credits.
+Submit cost: `ceil(sourceVideoDurationSeconds × nsfwVideoPerSec)` credits (default 78.75/s). First preview batch is **free**; regenerate previews **20** credits.
 
 **Sanitization:** pipeline generation rows return `prompt: null` over API key — rely on session state and `outputUrl`.
 

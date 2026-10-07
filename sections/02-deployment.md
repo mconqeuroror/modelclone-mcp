@@ -36,7 +36,7 @@ The MCP host must hit the **Express lambda**, not the static SPA.
 curl -sS https://mcp.modelclone.app/mcp/health
 ```
 
-**Success** — JSON with `"name": "modelclone-mcp"`, `"version": "2.0.0"`, `"toolGroups": { … }`, `"restBase": "https://modelclone.app/api/v1"`.
+**Success** — JSON with `"name": "modelclone-mcp"`, `"version": "2.1.0"`, `"toolGroups": { … }`, `"restBase": "https://modelclone.app/api/v1"`.
 
 **Failure** — HTML page titled "ModelClone — Cinematic AI Video…" → fix `vercel.json` and redeploy.
 
